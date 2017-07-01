@@ -1,0 +1,243 @@
+\documentclass[a4paper,onepage]{ltjsarticle}
+\usepackage{amsmath,amssymb,tikz,bussproofs,bcprules,listings}
+\lstset{%
+	% float=hbp,
+	basicstyle=\ttfamily,
+	numberstyle=\ttfamily\footnotesize,
+	identifierstyle=,
+	columns=flexible,
+	tabsize=2,
+	frame=single,
+	extendedchars=true,
+	inputencoding=utf8x,
+	showspaces=false,
+	showstringspaces=false,
+	% numbers=left,
+	breaklines=true,
+	breakautoindent=true,
+	captionpos=t,
+}
+\title{AT-TaPL 4: Typed Assembly Language pt.2}
+\author{河原 悟}
+\begin{document}
+\maketitle
+p149~
+\setcounter{section}{1}
+\section{}
+\subsection{Some examples and subtleties}
+例を使って\lstinline{prod}の型を見てみる。
+\begin{lstlisting}[numbers=none]
+prod: r3 := 0;
+       jump loop
+
+loop: if r1 jump done;
+       r3 := r2 + r3;
+       r1 := r1 + (-1);
+       jump loop
+
+done: jump r4
+\end{lstlisting}
+
+$\Gamma =\mathtt{\{r1, r2, r3:int,r4:\forall\alpha.code\{r1, r2, r3:int,r4:\alpha\}\}}$
+とし、$\Psi=\mathtt{\{prod,loop,done:code(\Gamma)\}}$とする。
+$I$を\lstinline{loop}が成す命令列とする。
+
+このとき$\Psi\vdash I:\mathtt{code(\Gamma)}$を示す。
+
+\begin{prooftree}
+	\AxiomC{}
+	\RightLabel{\small S-REG}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{r1:\Gamma(r1)=int}$}
+
+	\AxiomC{}
+	\RightLabel{\small S-LAB}
+	\UnaryInfC{$\Psi\vdash\mathtt{done:\Psi(done)=code(\Gamma)}$}
+	\RightLabel{\small S-VAL}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{done:code(\Gamma)}$}
+
+	\BinaryInfC{$\Psi\vdash\mathtt{if\ r1\ jump\ done:\Gamma\rightarrow\Gamma}$}
+\end{prooftree}
+
+\begin{prooftree}
+	\AxiomC{}
+	\RightLabel{\small S-REG}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{r2:\Gamma(r2)=int}$}
+
+	\AxiomC{}
+	\RightLabel{\small S-REG}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{r3:\Gamma(r3)=int}$}
+
+	\BinaryInfC{$\Psi\vdash\mathtt{r3:=r2+r3:}\Gamma\rightarrow\Gamma$}
+\end{prooftree}
+
+\begin{prooftree}
+	\AxiomC{}
+	\RightLabel{\small S-REG}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{r1:\Gamma(r2)=int}$}
+	
+	\AxiomC{}
+	\RightLabel{\small S-INT}
+	\UnaryInfC{$\Gamma\vdash\mathtt{-1:int}$}
+	\RightLabel{\small S-VAL}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{-1:int}$}
+	\BinaryInfC{$\Psi\vdash\mathtt{r1:=r1+(-1):\Gamma\rightarrow\Gamma}$}
+\end{prooftree}
+
+\begin{prooftree}
+	\AxiomC{}
+	\RightLabel{\small S-LAB}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{loop:\Psi(loop)=code(\Gamma)}$}
+	\RightLabel{\small S-VAL}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{loop:code(\Gamma)}$}
+	\UnaryInfC{$\Psi\vdash\mathtt{jump\ loop:code(\Gamma)}$}
+\end{prooftree}
+
+この副証明をS-SEQ規則で束ねることで、$\Psi\vdash I:\mathtt{code(\Gamma)}$であることがわかる。
+
+これに続き、各ラベルの指す命令列は$\mathtt{code(\Gamma)}$を持つことがわかる。
+しかし、命令列をすべてassignしてある\lstinline{r4}とその型は極めて微妙なところだ。
+次の例を考える。
+
+\begin{lstlisting}
+foo: r1 := bar;
+      jump r1
+
+bar: ...
+\end{lstlisting}
+
+\lstinline{bar}の型はどうなる? 多相がないとき、
+ラベル\lstinline{bar}は\lstinline{bar}に飛ぶときに\lstinline{r1}に入っている必要があるため、
+コードの型は$\mathtt{\Gamma(r1)=code(\Gamma)}$となるような$\mathtt{code(\Gamma)}$である必要がある。
+しかし単純型しかないときに、この型を解決することができない。
+
+多相があるとき、この問題を解決できる。
+\lstinline{bar}を$\tau=\mathtt{\forall \alpha.code\{r1:\alpha,...\}}$型とする。
+\lstinline{jump}命令のとき、レジスターファイルコンテキスト$\Gamma=\mathtt{\{r1:\tau,...\}}$を持ち、$\Gamma\vdash\mathtt{r1:code(\Gamma)}$を持たなければならない。
+S-INST規則を用いて、\lstinline{r1}の型$\tau$をinstantiateして$\Gamma\vdash\mathtt{r1:code\{r1:\tau,...\}}$を導出する。
+
+多相型以外でも解決法がある。
+まずひとつに、再帰型を使って解決することができる。
+もう一つには\textit{Top}型を使ってジャンプ先のレジスターの型を忘れることで実現できる。
+他の方法として、レジスターファイルの型をpartial mapとし、レジスターの型を忘れることができるサブタイピングを導入し、レジスターに値が代入されるまではオペランドに使用できないようにする。
+この最後のアプローチはオリジナルのTALで使用されている。
+多相型を使ったほうがより多くのコンパイル技術を適用することができるため、多相型を使う。
+
+\subsection{exercise: \lstinline{prod}と\lstinline{done}の導出を示せ。}
+prod:
+
+\begin{prooftree}
+	\AxiomC{}
+	\RightLabel{\small S-INT}
+	\UnaryInfC{$\Psi\vdash 0:\mathtt{int}$}
+	\RightLabel{\small S-VAL}
+	\UnaryInfC{$\Psi;\Gamma\vdash 0:\mathtt{int}$}
+	\RightLabel{\small S-MOV}
+	\UnaryInfC{$\Psi\vdash \mathtt{r3:=0:\Gamma\rightarrow\Gamma}$}
+
+	\AxiomC{}
+	\RightLabel{\small S-LAB}
+	\UnaryInfC{$\Psi\vdash \mathtt{loop:\Psi(loop)}$}
+	\RightLabel{\small S-VAL}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{loop: code(\Gamma)}$}
+	\RightLabel{\small S-JUMP}
+	\UnaryInfC{$\Psi\vdash\mathtt{jump\ loop: code(\Gamma)}$}
+
+	\RightLabel{S-SEQ}
+	\BinaryInfC{$\Psi\vdash\mathtt{r3:=0;jump\ loop:code(\Gamma)}$}
+\end{prooftree}
+
+done:
+
+\begin{prooftree}
+	\AxiomC{$\Psi;\Gamma\vdash\mathtt{r4:\forall\alpha.code\{r1,r2,r3:int,r4:\alpha\}}$}
+	\RightLabel{S-INST}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{r4:code\{r1,r2,r3:int,r4:code(\Gamma)\}}$}
+	\RightLabel{S-JUMP}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{jump\ r4:code\{r1,r2,r3:int,r4:code(\Gamma)\}}$}
+\end{prooftree}
+
+\newpage
+
+多相型が有効な例の一つに、control flow graphにおける``join points''の型が挙げられる。
+異なるコンテキストから同じラベルに飛ぶというシチュエーションを考える。
+
+\begin{lstlisting}
+{r1:int,...}
+jump baz
+
+...
+{r1:code{...}, ...}
+jump baz
+\end{lstlisting}
+\lstinline{r1}が必要な\lstinline{baz}の型はどうすればいいか。
+多相やサブタイピングがない場合、\lstinline{r1}は同じ型でなければならず、つまりこの場合型付けができない。
+この問題は、適当な整数を\lstinline{r1}にこのラベルにジャンプする前に常にロードすることで回避できる。
+しかし不要な命令が入るため、実行は遅くなる。
+これが多相をサポートしているとき、うまくいく。
+\lstinline{baz}を$\forall\alpha.\mathtt{code\{r1:\alpha,...\}}$型にし、最初の\lstinline{jump}で$\alpha$を\lstinline{int}にinstantiateする。
+一方次の\lstinline{jump}では$\alpha$を適切な\lstinline{code}型にinstantiateする。
+\textit{Top}型もまたjoin pointsには有効なメカニズムである。
+
+単純なサブタイピングでは捉えきれない、多相型が有効なもう一つの特徴として、\textit{calee-saves}レジスターという考えがある。
+callee-saveレジスターはその値がprocedure呼び出しの前後で値が変わらないものである。
+あるprocedureがこのレジスターを使用するとき、このprocedureはレジスターの値を保存しcallerから戻るときにその値を戻す必要がある。
+メモリーの値を保存、復元することはできないが、レジスターの値を他のレジスターに保存においておくことはできる。
+
+\lstinline{prod}のようなprocedureを考え、レジスター\lstinline{r5}をcallee-saves registerとする。
+\lstinline{r4}はprocedureのリターンアドレスを格納するレジスターとし、
+このprocedureへのラベルの型を$\forall\alpha.\mathtt{\{r5:\alpha,r4:\forall\beta.code\{r5:\alpha,r4:\beta,...\},...\}}$とすることで、
+これを果たすことができる。
+このとき他のレジスターの型は$\alpha$の自由出現を持たないとする。
+リターンアドレスの型は\lstinline{r5}がprocedureの呼び出しの前後で同じ型$\alpha$を持っていることを示している。
+さらに、このprocedureは\lstinline{r5}を、\lstinline{r5}の型は抽象なので一様に扱う必要がある。
+抽象型の値を作る手段はなく、$\alpha$型の値は一つしか受け取っていないため、\lstinline{r5}はprocedure呼び出しの前後で同じ値でなければならない。
+procedureの前後で同じ値であればいいので、\lstinline{r5}の値を他のレジスターに移し\lstinline{r5}に他の値を入れることはできる。
+
+多相型は低級言語の型システムの設計において統一的な役割を果たしていることは明らかである。
+また多相型は型を簡単に``忘れる''方法を与えてくれ、それはレジスターやjoin pointsを通したジャンプに必要になる。
+それのみならずcallee-saves registerのようなcompilerの重要なinvaliantを捉える能力も備えている。
+
+\subsection{exercise: \lstinline{done}の\lstinline{jump r4}を\lstinline{jump r1}に変更してみる。このとき結果のコードには型がつかないことを示せ。}
+\lstinline{done}に飛ぶ時、\lstinline{r1}の型は\lstinline{int}である。
+\lstinline{int}型の値を$\mathtt{code(\Gamma)}$型の値に変換する方法がないため、S-JUMP規則により型をつけることができないため。
+\subsection{exercise: type variableとuniversal polymorphismを捨てて\textit{Top}型とサブタイピングを追加する。これでtype systemをreformulateして例に型をつけよ。}
+
+\textit{Top}型を追加する。
+
+\begin{flalign*}
+	\tau\mathtt{::=}\dots Top
+\end{flalign*}
+
+S-INSTをサブタイピングに置き換える。
+
+\infrule[S-INST]{
+	\Psi;\Gamma\vdash \nu:Top
+}{
+	\Psi;\Gamma\vdash\nu : \tau'
+}
+
+prod:
+
+(略)
+
+loop:
+
+(略)
+
+done:
+
+\begin{prooftree}
+	\AxiomC{$\Psi;\Gamma\vdash\mathtt{r4:Top}$}
+	\RightLabel{S-INST}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{r4:code\{r1,r2,r3:int,r4:code(\Gamma)\}}$}
+	\RightLabel{S-JUMP}
+	\UnaryInfC{$\Psi;\Gamma\vdash\mathtt{jump\ r4:code\{r1,r2,r3:int,r4:code(\Gamma)\}}$}
+\end{prooftree}
+
+\subsection{exercise: 再帰型で}
+
+r4:v and v=code{r1,r2,r3:int,r4:v}
+\subsection{callee-saves registersは実際に値を保存していることを証明せよ。}
+
+\end{document}
+

@@ -79,7 +79,7 @@ CISCライクではなく、RISCライクな、高級言語の機能をエンコ
 			 &&&\mathtt{r1\ \mid\ r2\ \mid\ \cdots\ \mid\ rk}&&&\\
 			 &v\ \mathtt{::=}&&&operands:&\\
 			 &&n&&integer\ literal&\\
-			 &&ll &&label\ or\ pointer&\\
+			 &&l &&label\ or\ pointer&\\
 			 &&r&&registers&
 			\end{align*}
 		\end{flushleft}
@@ -194,7 +194,7 @@ $\hat{R}$は以下のような動作を表す。
 \begin{itemize}
 	\item $\hat{R}(r)=R(r)$ レジスターの値
 	\item $\hat{R}(n)=n$ 即値
-	\item $\hat{R}(ll )=ll $ ラベル
+	\item $\hat{R}(l )=l $ ラベル
 \end{itemize}
 
 \texttt{jump}と\texttt{if-jump}はinvalidなラベルを渡すとstuckしてしまう。
@@ -311,7 +311,7 @@ $\mathtt{code}(\Gamma)$はレジスターファイルの型$\Gamma$における�
 		\begin{flushleft}
 			\textit{Values}\hfill \fbox{$\Psi\vdash v:\tau$}
 			\infax[S-INT]{\Psi\vdash n:\mathtt{int}}
-			\infax[S-LAB]{\Psi\vdash ll :\Psi(ll )}
+			\infax[S-LAB]{\Psi\vdash l :\Psi(l )}
 
 			\textit{Operands}\hfill \fbox{$\Psi;\Gamma\vdash v: \tau$}
 			\infax[S-REG]{\Psi;\Gamma\vdash r:\Gamma (r)}
@@ -383,8 +383,8 @@ $\mathtt{code}(\Gamma)$はレジスターファイルの型$\Gamma$における�
 
 			\textit{Heaps}\hfill \fbox{$\vdash H:\Psi$}
 			\infrule[S-HEAP]{%
-				\forall ll \in dom(\Psi).\Psi\vdash H(ll ):\Psi (ll )
-				\\\andalso FTV(\Psi(ll ))=\Phi
+				\forall l \in dom(\Psi).\Psi\vdash H(l ):\Psi (l )
+				\\\andalso FTV(\Psi(l ))=\Phi
 			}{\vdash H:\Psi}
 
 			\textit{Machine States}\hfill \fbox{$\vdash M$}
