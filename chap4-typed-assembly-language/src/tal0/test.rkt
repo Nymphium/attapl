@@ -1,26 +1,24 @@
 #lang typed/racket
 
-(require "interpreter.rkt")
-(require "lang-utils.rkt")
+(require "interpreter.rkt"
+         "lang-utils.rkt")
 
 (: R RegFiles)
-(define R (hash 1 (Imm 2) 2 (Imm 2) 3 (Imm 4) 4 (Label "exit")))
+(define R (::R:: 2 2 4 exit))
 
 (: H Heaps)
 (define H
-  {::tal0::
-  pred (
-        (Assign (Reg 3) (Imm 0))
-        (Jmp (Label "loop")))
+  {::H::
+  prod (
+        r3 := 0
+        jump loop)
 
   loop (
-        (IfJmp (Reg 1) (Label "done"))
-        (Add (Reg 3) (Reg 2) (Reg 3))
-        (Add (Reg 1) (Reg 1) (Imm -1))
-        (Jmp (Label "loop")))
+        if r1 jump done
+        r3 := r2 + r3
+        r1 := r1 + -1
+        jump loop)
 
-  done (
-        (Jmp (Reg 4)))
-  })
+  done (jump r4)})
 
-(eval (MachineStatus H R (list (Jmp (Label "prod")))))
+(eval (MachineStatus H R (::I:: jump prod)))

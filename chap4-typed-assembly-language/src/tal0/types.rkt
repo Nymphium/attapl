@@ -8,7 +8,7 @@
 (struct Imm ([v : Integer]) #:transparent)
 (struct Label ([v : String]) #:transparent)
 
-(define-type InsSeq (U (cons Jmp Null) (cons Ins InsSeq)))
+(define-type InsSeq (U (List Jmp) (cons Ins InsSeq)))
 (define-type Ins (U Assign Add IfJmp))
 (struct Assign ([rd : Reg] [sv : Value]) #:transparent)
 (struct Add ([rd : Reg] [sv1 : Reg] [sv2 : Value]) #:transparent)
