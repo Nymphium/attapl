@@ -1,0 +1,282 @@
+\documentclass[a4paper,oneside]{ltjsarticle}
+\usepackage{amsmath,amssymb,tikz,bussproofs,bcprules,listings}
+\usepackage{multicol}
+\usepackage{hyperref}
+\usepackage{amsthm}
+\lstset{%
+    % float=hbp,
+    basicstyle=\ttfamily,
+    numberstyle=\ttfamily\footnotesize,
+    identifierstyle=,
+    columns=flexible,
+    tabsize=2,
+    frame=single,
+    extendedchars=true,
+    inputencoding=utf8x,
+    showspaces=false,
+    showstringspaces=false,
+    % numbers=left,
+    breaklines=true,
+    breakautoindent=true,
+    captionpos=t,
+}
+\setlength{\columnseprule}{0.4pt}
+\newenvironment{linedenv}%
+{\begin{minipage}{\textwidth}
+    \noindent\hrule{}}%
+    {\noindent\hrule{}
+\end{minipage}}
+\newenvironment{boxedenv}%
+{\begin{linedenv}
+    \begin{multicols}{2}}%
+    {\end{multicols}
+\end{linedenv}}
+\newcommand{\code}[1]{\mathtt{code}(#1)}
+\newcommand{\commit}[1]{\mathtt{commit}\ #1}
+\newcommand{\Mem}[1]{\mathtt{Mem}[#1]}
+\newcommand{\uptr}[1]{\mathtt{uptr}(#1)}
+\newcommand{\ptr}[1]{\mathtt{ptr}(#1)}
+\newcommand{\vuptr}[1]{\mathtt{uptr}\langle #1\rangle}
+\newcommand{\vptr}[1]{\mathtt{ptr}\langle #1\rangle}
+\newcommand{\malloc}[1]{\mathtt{malloc}\ #1}
+\newcommand{\salloc}[1]{\mathtt{salloc}\ #1}
+\newcommand{\sfree}[1]{\mathtt{sfree}\ #1}
+\newcommand{\Tint}{\mathtt{int}}
+\newcommand{\Tsp}{\mathtt{sp}}
+\newtheorem{lemmax}{補題}
+\newenvironment{lemma}%
+{\begin{lemmax}}
+{\end{lemmax}\hfill\ensuremath{\square}}
+\newtheorem{theorem}{定理}
+\title{AT-TaPL 4: Typed Assembly Language Pt.4}
+\author{河原 悟}
+\begin{document}
+\maketitle
+
+\setcounter{section}{3}
+\section{TAL-1 Changes to the Type System}
+\begin{figure}
+    \begin{boxedenv}
+        \begin{center}
+            \begin{tabular}{llr}
+                $\tau\ ::=$&&operand types:\\
+                           &$\dots$&as in TAL-0\\
+                           &$\mathtt{ptr}(\sigma)$&shared data pointers\\
+                           &$\mathtt{uptr}(\sigma)$&unique data pointers\\
+                           &\multicolumn{2}{l}{$\forall \rho.\tau$ quantification onver allocation}
+            \end{tabular}
+            \begin{tabular}{llr}
+                $\sigma\ ::=$&&allocated types:\\
+                             &$\epsilon$&empty\\
+                             &$\tau$&value type\\
+                             &$\sigma_1,\sigma_2$&adjacent\\
+                             &$\rho$&allocated type variable
+            \end{tabular}
+        \end{center}
+    \end{boxedenv}
+    \caption{TAL-1 types}
+    \label{fig:tal1types}
+\end{figure}
+
+\autoref{fig:tal1types}において、$\tau$は値とオペランドを示し、$\sigma$はheap-allocated dataを示す。
+allocated types($\sigma$)はオペランド型のシーケンスから成る。
+adjacencyは$\epsilon$と暗に結合しているものとする。
+
+$\mathtt{ptr}\left(\mathtt{int}, \left(\rho, \left(\mathtt{int}, \epsilon\right)\right)\right) = \mathtt{ptr}\left(\left(\mathtt{int}, \rho\right), \mathtt{int}\right)$
+
+\begin{figure}
+    \begin{boxedenv}
+        \begin{center}
+            Heap Value \hfill \fbox{$\Psi\vdash \nu:\tau$}
+
+            \infrule[S-TUPLE]{%
+                \Psi;\Gamma\vdash \nu_i:\tau_i
+                }{%
+                \Psi\vdash \langle \nu_1,\dots,\nu_n\rangle : \tau_1,\dots,\tau_n}
+
+            Operands \hfill \fbox{$\Psi\vdash \nu:\tau$}
+
+            \infrule[S-UPTR]{%
+                \Psi;\Gamma\vdash h:\sigma
+                }{%
+                \Psi;\Gamma\vdash \mathtt{uptr}(h):\mathtt{uptr}(\rho)}
+        \end{center}
+    \end{boxedenv}
+    \caption{TAL-1 typing rules (heap values and operands)}
+    \label{fig:tal1htyprule}
+\end{figure}
+
+\begin{figure}
+    \begin{linedenv}
+        \vskip5pt Instructions\hfill\fbox{$\Psi\vdash \iota:\Gamma_1\rightarrow \Gamma_2$}
+
+        \infrule[S-MOV-1]{%
+            \Psi;\Gamma\vdash \nu:\tau
+            \andalso
+            \tau\neq \mathtt{uptr}(\rho)
+            }{%
+            \Psi\vdash r_d:=\nu:\Gamma\rightarrow\Gamma[r_d:\tau]}
+
+        \infrule[S-MALLOC]{%
+            n\geq 0
+            }{%
+            \Psi\vdash r_d:=\ \mathtt{malloc}\ n:
+              \Gamma\rightarrow\Gamma[r_d:\mathtt{uptr}(\underbrace{\mathtt{int},\dots,\mathtt{int}}_{n})]}
+
+        \infrule[S-COMMIT]{%
+            \Psi;\Gamma\vdash r_d:\mathtt{uptr}(\sigma)
+            \andalso
+            r_d\neq \mathtt{sp}
+            }{%
+            \Psi\vdash \mathtt{commit}\ r_d:\Gamma\rightarrow\Gamma[r_d:\mathtt{ptr}(\rho)]}
+
+        \infrule[S-LDS]{%
+            \Psi;\Gamma\vdash r_s:\ptr{\tau_1,\dots,\tau_n,\rho}
+            }{%
+            \Psi\vdash r_d:=\Mem{r_s+n}:\Gamma\rightarrow\Gamma[r_d:\tau_n]}
+
+        \infrule[S-LDU]{%
+            \Psi;\Gamma\vdash r_s:\uptr{\tau_1,\dots,\tau_n,\rho}
+            }{%
+            \Psi\vdash r_d:=\Mem{r_s+n}:\Gamma\rightarrow\Gamma[r_d:\tau_n]}
+
+        \infrule[S-STS]{%
+            \Psi;\Gamma\vdash r_s:\tau_n
+            \andalso
+            \tau_n\neq \uptr{\sigma'}
+            \andalso
+            \Psi;\Gamma\vdash r_d:\ptr{\tau_1,\dots,\tau_n,\sigma}
+            }{%
+            \Psi\vdash\Mem{r_d+n}:=r_s:\Gamma\rightarrow \Gamma}
+
+        \infrule[S-STU]{%
+            \Psi;\Gamma\vdash r_s:\tau
+            \andalso
+            \tau\neq \uptr{\sigma'}
+            \andalso
+            \Psi;\Gamma\vdash r_d:\uptr{\tau_1,\dots,\tau_n,\sigma}
+            }{%
+            \Psi\vdash \Mem{r_d+n}:=r_s:\Gamma\rightarrow\Gamma[r_d:\uptr{\tau_1,\dots,\tau,\sigma}]}
+
+        \infrule[S-SALLOC]{%
+            \Psi;\Gamma\vdash \mathtt{sp}:\uptr{\sigma}
+            \andalso
+            n\geq 0
+            }{%
+            \Psi\vdash\mathtt{salloc}\ n:\Gamma\rightarrow\Gamma[\mathtt{sp}:\uptr{\underbrace{\mathtt{int},\dots,\mathtt{int},\sigma}_n}]}
+
+        \infrule[S-SFREE]{%
+            \Psi;\Gamma\vdash \mathtt{sp}:\uptr{\tau_1,\dots,\tau_n,\sigma}
+            }{%
+            \Psi\vdash \mathtt{sfree}\ n:\Gamma\rightarrow\Gamma[\mathtt{sp}:\uptr{\sigma}]}
+    \end{linedenv}
+    \caption{TAL-1 typing rules(instructions)}
+    \label{fig:tal1ityprule}
+\end{figure}
+
+\autoref{fig:tal1htyprule}と\autoref{fig:tal1ityprule}は型付け規則を表している。
+TAL-0と同様に$\Gamma$はレジスターからオペランドの型への全域写像になっている。
+$\Psi$はラベルからallocated operand types(つまり\texttt{code}または\texttt{ptr}型)への有限の部分関数となっている。
+
+loadとstoreの命令にはそれぞれ2つの規則があり、unique pointerとshared pointerに対応している。
+storeに関する規則については、unique pointerをstoreしたいデータ構造の中に置くことはできないようになっている。
+shared pointerに値を格納するときは、新しい値と以前の値の型が一致している必要がある。
+一方unique pointerにstoreするときはその必要はない。
+
+スタックオーバーフロー以外でstuckしないことを、TAL-0の健全性の証明をTAL-1の範囲まで拡張することで証明できる。
+その証明のために示すべき性質のひとつとして、全ての型導出はヒープの拡張の元でもvalidであることである。
+つまり、$\vdash H:\Psi$かつ$\Psi\vdash h:\tau$ならば$\vdash H[\ell=h]:\Psi[\ell:\tau]$となる。
+もう一つ示すべきものとして、ヒープにあるラベル$\ell$が与えられた時、その型は実行の間は不変になることである。
+つまり、一度ポインターをcommitして共有されたら、その型は変わらなくなる。
+\subsection{Exercise: 健全性の証明をTAL-1に拡張せよ。}
+まず2つの補題を用意する。
+
+\begin{lemma}[ヒープ上の型]\label{lemma:1}
+    $\vdash H:\Psi$かつ$\Psi\vdash h:\tau$ならば$\vdash H[\ell=h]:\Psi[\ell:\tau]$
+\end{lemma}
+\begin{proof}
+\end{proof}
+\begin{lemma}[shared pointerの型]\label{lemma:2}
+    一度共有されたポインターはその後の型が不変になる。
+\end{lemma}
+\begin{proof}
+\end{proof}
+\begin{theorem}[soundness of TAL-1 type system]\label{theorem:1}
+    $\vdash M$のとき、$M\rightarrow M'$かつ$\vdash M'$となる$M'$が存在する。
+\end{theorem}\hfill\ensuremath{\square}
+\begin{proof}
+    $M=\left(H,R,I\right)$とする。S-MACH規則の反転から、
+    \begin{enumerate}
+        \item $\vdash H:\Psi$
+        \item $\Psi\vdash R:\Gamma$
+        \item $\Psi\vdash I:\mathtt{code}(\Gamma)$
+    \end{enumerate}
+
+    となる$\Psi$、$\Gamma$が存在する。
+
+    \begin{enumerate}
+        \item $I=r_d:=\nu;I'$のとき
+
+            S-SEQ規則の反転から、$\exists \Gamma'. \Psi\vdash r_d:=\nu:\Gamma\rightarrow\Gamma'\wedge \Psi\vdash I':\code{\Gamma'}$が分かる。
+            S-MOV-1規則の反転から、$\exists \tau. \Psi;\Gamma\vdash \nu:\tau\wedge \Gamma'=\Gamma[r_d:\tau]\wedge \tau\neq \uptr{\rho}$。
+            レジスターの置換補題から、$\Psi;\Gamma\vdash \hat{R}(\nu):\tau$。
+            $M'=(H,R[r_d:\tau],I')$とすると、MOV規則から$M\rightarrow M'$がわかる。
+            S-REGFILE規則から$\Psi\vdash R[r_d=n]:\Gamma[r_d:\tau]$が示せる。
+        \item $I=r_d:=\malloc{n};I'$のとき
+
+            S-SEQ規則の反転から、$\exists \Gamma'.\Psi\vdash \malloc{n}:\Gamma\rightarrow\Gamma'\wedge \Psi\vdash I':\code{\Gamma'}$が分かる。
+            S-MALLOC規則の反転から$\exists n. n \geq 0 \wedge \Gamma'=\Gamma[r_d:\uptr{\rho}]\ where\ \rho=\underbrace{\Tint,\dots,\Tint}_n$。
+            $M'=(H,R[r_d:=\uptr{m_1,\dots,m_n}], I')$とすると、MALLOC規則から$M\rightarrow M'$が分かる。
+            S-REGFILE規則から$\Psi\vdash R[r_d=\uptr{m_1,\dots,m_n}]:\Gamma[r_d:\uptr{\rho}]$が分かる。
+        \item $I=\commit{r_d};I'$のとき
+
+            S-SEQ規則の反転から、$\exists \Gamma'. \Psi\vdash \commit{r_d}:\Gamma\rightarrow\Gamma' \wedge \Psi\vdash I':\code{\Gamma'}$が分かる。
+            S-COMMIT規則の反転から、$\Psi;\Gamma\vdash r_d:\uptr{\rho}$,$r_d\neq \mathtt{sp}$, $\Gamma'=\Gamma[r_d:\ptr{\rho}]$が分かる。
+            $r_d=\ell, H(\ell)=h, M'=(H[\ell=h],R[r_d=\ell],I')$とすると、COMMIT規則から$M\rightarrow M'$が分かる。
+            S-REGFILE規則から$\Psi\vdash R[r_d=\ell]:\Gamma[r_d:\ptr{\rho}]$が分かる。
+        \item $I=r_d:=\Mem{r_s+n};I'$のとき
+
+            S-SEQ規則の反転から、$\exists\Gamma'. \Psi\vdash r_d:=\Mem{r_s+n}:\Gamma\rightarrow\Gamma' \wedge \Psi\vdash I':\code{\Gamma'}$が分かる。
+            \begin{enumerate}
+                \item $r_d:\ptr{\tau_1,\dots,\tau_n,\sigma}$のとき
+
+                    S-LDS規則の反転から、$\exists\tau_n. \Psi;\Gamma\vdash \Mem{r_s+n}:\tau_n\wedge \Gamma'=\Gamma[r_d:\tau_n]$がわかる。
+                    .....
+                \item $r_d:\uptr{\tau_1,\dots,\tau_n,\sigma}$のとき
+            \end{enumerate}
+        \item $I=\Mem{r_d+n}:=r_s;I'$のとき
+
+            S-SEQ規則の反転から、$\exists\Gamma'.\Psi\vdash \Mem{r_d+n}:=r_s : \Gamma\rightarrow\Gamma' \wedge \Psi\vdash I':\code{\Gamma'}$。
+            \begin{enumerate}
+                \item $r_d:\ptr{\tau_1,\dots,\tau_n,\sigma}$のとき
+
+                    S-STS規則の反転から、$\exists \tau'. r_s:\tau'\wedge \tau' \neq \uptr{\sigma'} \wedge \tau' = \tau_n\wedge \Gamma'=\Gamma$。
+                    $\Psi\vdash \nu:\tau'$を満たす$\nu$を取ると、レジスターの置換補題より$\Psi;\Gamma\vdash \hat{R}(\nu):\tau'$。
+                    $R(r_d)=\ell, H(\ell)=\langle \nu_0,\dots,\nu_n,\dots,\nu_{n+m}\rangle$を満たす$\ell$を取り、
+                    $M'=(H[\ell=\langle \nu_0,\dots,\nu,\dots,\nu_{n+m}\rangle],R,I)$とすると、ST-S規則により$M\rightarrow M'$が分かる。
+                    $\vdash (H,R,I')$は直ちに分かる。
+                \item $r_d:\uptr{\tau_1,\dots,\tau_n,\sigma}$のとき
+
+                    S-STU規則の反転から、$\exists \tau'.r_s:\tau'\wedge \tau' \neq \uptr{\sigma'}\wedge \Gamma'=\Gamma$。
+                    $\Psi\vdash \nu:\tau'$を満たす$\nu$を取ると、レジスターの置換補題より$\Psi;\Gamma\vdash \hat{R}(\nu):\tau'$。
+                    $R(r_d)=\vuptr{\nu_0,\dots,\nu_n,\dots,\nu_{n+m}}$とし、$M'=(H,R[r_d=\vuptr{\nu_0,\dots,\nu,\dots,\nu_{n+m}}], I')$とすると、
+                    ST-U規則により$M\rightarrow M'$が分かる。
+                    $\vdash (H,R,I')$は直ちに分かる。
+            \end{enumerate}
+        \item $I=\salloc{n};I'$のとき
+
+            S-SEQ規則の反転から、$\exists\Gamma'.\Psi\vdash \salloc{n}:\Gamma\rightarrow\Gamma' \wedge \Psi\vdash I':\code{\Gamma'}$。
+            S-SALLOC規則の反転から、$\exists n.n\geq 0 \wedge \Psi;\Gamma\vdash \Tsp:\uptr{\tau_1,\dots,\tau_n,\sigma}\wedge \Gamma'=\Gamma[\Tsp:\uptr{\sigma}]$。
+            $p+n\neq \mathtt{MAXSTACK}$となる$p$をとり、$R(\Tsp)=\vuptr{\nu_0,\nu_p}$とする。
+            $M'=(H,R[\Tsp=\vuptr{m_1,\dots,m_n,\nu_0,\dots,\nu_p}],I')$とすると、SALLOC規則により$M\rightarrow M'$がわかる。
+            S-REGFILE規則から$\Psi\vdash R[\Tsp=\vuptr{m_0,\dots,m_n,\nu_0,\dots,\nu_p}]:\Gamma[\Tsp:\uptr{\underbrace{\Tint,\dots,\Tint}_n,\sigma}]$が言える。
+        \item $I=\sfree{n};I'$のとき
+
+            S-SEQ規則の反転から、$\exists\Gamma'. \Psi\vdash \sfree{n}:\Gamma\rightarrow \Gamma'\wedge \Psi\vdash I':\code{\Gamma'}$。
+            S-SFREE規則の反転から、$\exists n.\Psi\vdash \Tsp:\uptr{\tau_1,\dots,\tau_n}\wedge \Gamma' =\Gamma[\Tsp:\uptr{\sigma}]$
+            ある$p\geq 0$について、$R(\Tsp)=\vuptr{m_1,\dots,m_n,\nu_0,\dots,\nu_p}$とする。
+            $M'=(H,R[\Tsp=\vuptr{\nu_0,\dots,\nu_p}], I')$とすると、SFREE規則により$M\rightarrow M'$がわかる。
+            S-REGFILE規則から、$\Psi\vdash R[\Tsp=\vuptr{\nu_0,\dots,\nu_p}]:\Gamma[\Tsp:\uptr{\sigma}]$がわかる。
+    \end{enumerate}
+\end{proof}
+\end{document}
